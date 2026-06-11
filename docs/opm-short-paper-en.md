@@ -181,7 +181,7 @@ $$
 where `a` is the coordinate axis. To write compact binary files, coefficients are converted to integers using configured quantization steps:
 
 $$
-n_{a,k}=\operatorname{round}\!\left(\frac{c_{a,k}}{q_k}\right).
+n_{a,k}=\mathrm{round}\!\left(\frac{c_{a,k}}{q_k}\right).
 $$
 
 At read time the stored integer is reconstructed as
@@ -213,7 +213,7 @@ Flat steps are useful when coefficient ranges are similar across degrees. Growth
 Quantized coefficients are signed integers. OPM first applies ZigZag coding:
 
 $$
-\operatorname{zigzag}(n)=
+\mathrm{zigzag}(n)=
 \begin{cases}
 2n, & n\ge 0,\\
 -2n-1, & n<0.
@@ -223,7 +223,7 @@ $$
 Thus 0, -1, 1, -2, 2, ... become small unsigned integers. The generator then computes the required bit width for each coordinate axis and polynomial degree. If `s` is the segment index, the width for axis `a` and degree `k` is
 
 $$
-w_{a,k}=\max_s \operatorname{bit\_length}\!\left(\operatorname{zigzag}(n_{s,a,k})\right).
+w_{a,k}=\max_s \mathrm{bit\_length}\!\left(\mathrm{zigzag}(n_{s,a,k})\right).
 $$
 
 The file stores this `axis × degree` width table. The payload is written in degree-major order within each axis:
@@ -312,7 +312,7 @@ $$
 Each body uses the segment boundaries of its corresponding OPM file. OPM and Swiss Ephemeris are evaluated at exactly the same JD grid. The angular error is
 
 $$
-\mathrm{err}=\operatorname{atan2}\!\left(
+\mathrm{err}=\mathrm{atan2}\!\left(
 \lVert\mathbf r_{\mathrm{truth}}\times\mathbf r_{\mathrm{candidate}}\rVert,
 \mathbf r_{\mathrm{truth}}\cdot\mathbf r_{\mathrm{candidate}}
 \right),
@@ -704,7 +704,7 @@ The direction-angle error uses a stable cross/dot form:
 
 $$
 \begin{aligned}
-\mathrm{err}_{\mathrm{rad}}&=\operatorname{atan2}(\lVert\mathbf a\times\mathbf b\rVert,\mathbf a\cdot\mathbf b),\\
+\mathrm{err}_{\mathrm{rad}}&=\mathrm{atan2}(\lVert\mathbf a\times\mathbf b\rVert,\mathbf a\cdot\mathbf b),\\
 \mathrm{err}_{\mathrm{arcsec}}&=\mathrm{err}_{\mathrm{rad}}\frac{180}{\pi}\times3600.
 \end{aligned}
 $$
