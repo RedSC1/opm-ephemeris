@@ -4,6 +4,13 @@ Compact Chebyshev ephemeris representation with Python reference tools, validati
 
 This repository contains paper/demo code for generating, reading, validating, and benchmarking prototype OPM1 files. It is not the production C++ implementation.
 
+## Technical preprint
+
+The technical preprint is included in `docs/`:
+
+- English: [`docs/opm-short-paper-en.pdf`](docs/opm-short-paper-en.pdf) ([source](docs/opm-short-paper-en.md))
+- Chinese: [`docs/opm-short-paper-zh.pdf`](docs/opm-short-paper-zh.pdf) ([source](docs/opm-short-paper-zh.md))
+
 ## Install
 
 ```bash
