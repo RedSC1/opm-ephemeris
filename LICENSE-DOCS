@@ -9,6 +9,6 @@ Human-readable summary: https://creativecommons.org/licenses/by/4.0/
 
 Suggested attribution:
 
-> OpenDestiny contributors, "OPM: A Compact Chebyshev Ephemeris Representation", 2026.
+> Cite the corresponding paper, figure, data file, software release, or repository record. If no more specific citation is available, cite this repository or its associated release/DOI as `OPM Ephemeris`, 2026.
 
 This license does not apply to third-party materials referenced by or required to reproduce the results, including JPL/NAIF ephemeris data, Swiss Ephemeris software or data files, or other third-party packages. See `THIRD_PARTY_NOTICES.md`.
