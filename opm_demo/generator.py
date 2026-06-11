@@ -96,6 +96,7 @@ CLOCK_KIND = {
 
 FRAME_NONE = 0
 FRAME_CHEB1_PLANE_APSIS = 1
+FRAME_CHEB1_NORMAL_APSIS = 2
 REFERENCE_SHAPE_NONE = 0
 REFERENCE_SHAPE_MEAN_XY_CHEB = 1
 RESIDUAL_XYZ_DEGREE_MAJOR_EXACT_WIDTH = 1
@@ -152,6 +153,7 @@ FRAME_POLICY_NONE = 0
 FRAME_POLICY_PER_SEGMENT_BEST_PLANE_APSIS = 1
 FRAME_POLICY_CHEB1_BEST_PLANE_APSIS = 2
 FRAME_POLICY_FIXED_GLOBAL_FRAME = 3
+FRAME_POLICY_CHEB1_BEST_NORMAL_APSIS = 4
 
 APSIS_POLICY_NONE = 0
 APSIS_POLICY_MIN_RADIUS_DIRECTION = 1
@@ -214,6 +216,19 @@ class BaryProvider:
         if np.any(~np.isfinite(out)):
             bad = int(np.sum(~np.isfinite(out[:, 0])))
             raise RuntimeError(f"Missing SPK coverage for target {self.target_id}: {bad} samples")
+        return out
+
+    def velocity(self, jd_arr: np.ndarray) -> np.ndarray:
+        tdb = np.asarray(jd_arr, dtype=np.float64)
+        out = np.full((len(tdb), 3), np.nan, dtype=np.float64)
+        for seg in self.segments:
+            mask = (tdb >= seg.start_jd) & (tdb <= seg.end_jd)
+            if np.any(mask):
+                _pos, vel = seg.compute_and_differentiate(tdb[mask])
+                out[mask] = vel.T
+        if np.any(~np.isfinite(out)):
+            bad = int(np.sum(~np.isfinite(out[:, 0])))
+            raise RuntimeError(f"Missing SPK velocity coverage for target {self.target_id}: {bad} samples")
         return out
 
 
@@ -475,30 +490,60 @@ def pack_model_table(shape_x: np.ndarray | None, shape_y: np.ndarray | None, fra
     return b"".join(parts)
 
 
-def fit_cheb1_frame_model(module, tmids: np.ndarray, values: np.ndarray):
+def fit_cheb1_frame_model(module, tmids: np.ndarray, values: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
     if len(tmids) == 1:
         tnorm = np.zeros(1, dtype=np.float64)
-        model = module.TimeModel(
-            name="cheb1",
-            coeff_plane_u=np.asarray([values[0, 0], 0.0], dtype=np.float64),
-            coeff_plane_v=np.asarray([values[0, 1], 0.0], dtype=np.float64),
-            coeff_apsis_angle=np.asarray([values[0, 2], 0.0], dtype=np.float64),
-            eval_fn=lambda coeff, t: module.cheb_eval(coeff, t),
-        )
+        coeffs = np.column_stack([values[0], np.zeros(values.shape[1], dtype=np.float64)])
     else:
         tnorm = module.normalize_time(tmids, tmids[0], tmids[-1])
-        model = module.fit_cheb_model(tnorm, values, 1)
-    return tnorm, model
+        coeffs = np.vstack([module.cheb_fit(tnorm, values[:, axis], 1) for axis in range(values.shape[1])])
+    return tnorm, coeffs
+
+
+def eval_frame_coeffs(module, frame_coeffs: np.ndarray, tnorm: np.ndarray) -> np.ndarray:
+    params = np.column_stack([module.cheb_eval(frame_coeffs[i], tnorm) for i in range(frame_coeffs.shape[0])])
+    if frame_coeffs.shape[0] == 4:
+        normals = params[:, :3]
+        norms = np.linalg.norm(normals, axis=1)
+        if np.any(norms <= 0.0):
+            raise ValueError("invalid evaluated normal-frame parameter")
+        params[:, :3] = normals / norms[:, None]
+    return params
 
 
 def frame_values_from_segments(segments: list) -> tuple[np.ndarray, np.ndarray]:
     tmids = np.asarray([s.tmid for s in segments], dtype=np.float64)
-    values = np.column_stack([
-        np.asarray([s.plane_u_best for s in segments], dtype=np.float64),
-        np.asarray([s.plane_v_best for s in segments], dtype=np.float64),
-        np.unwrap(np.asarray([s.apsis_angle_best for s in segments], dtype=np.float64)),
-    ])
+    normals = np.asarray([proto.normal_from_plane_uv(float(s.plane_u_best), float(s.plane_v_best)) for s in segments], dtype=np.float64)
+    alpha = np.asarray([s.apsis_angle_best for s in segments], dtype=np.float64)
+    for i in range(1, len(normals)):
+        if float(np.dot(normals[i], normals[i - 1])) < 0.0:
+            normals[i] = -normals[i]
+            alpha[i] += math.pi
+    values = np.column_stack([normals, np.unwrap(alpha)])
     return tmids, values
+
+
+def frame_values_from_params(tmids: list[float], best_params: list[tuple[float, float, float]]) -> tuple[np.ndarray, np.ndarray]:
+    tmids_arr = np.asarray(tmids, dtype=np.float64)
+    normals = np.asarray([proto.normal_from_plane_uv(float(u), float(v)) for u, v, _ in best_params], dtype=np.float64)
+    alpha = np.asarray([a for _, _, a in best_params], dtype=np.float64)
+    for i in range(1, len(normals)):
+        if float(np.dot(normals[i], normals[i - 1])) < 0.0:
+            normals[i] = -normals[i]
+            alpha[i] += math.pi
+    return tmids_arr, np.column_stack([normals, np.unwrap(alpha)])
+
+
+def align_positions_frame(module, pos: np.ndarray, params: np.ndarray) -> np.ndarray:
+    if len(params) == 4:
+        return module.align_positions_normal(pos, params[:3], float(params[3]))
+    return module.align_positions(pos, float(params[0]), float(params[1]), float(params[2]))
+
+
+def unalign_positions_frame(module, aligned: np.ndarray, params: np.ndarray) -> np.ndarray:
+    if len(params) == 4:
+        return module.unalign_positions_normal(aligned, params[:3], float(params[3]))
+    return module.unalign_positions(aligned, float(params[0]), float(params[1]), float(params[2]))
 
 
 def fit_raw_sun(provider: BaryProvider, cfg: BodyConfig, jd_start: float, jd_end: float, node_oversample: int) -> PackedBody:
@@ -545,21 +590,15 @@ def fit_fixed_frame_body(provider: BaryProvider, cfg: BodyConfig, jd_start: floa
         best_params.append(proto.fit_best_frame_params(provider.position(nodes)))
         tmids.append(0.5 * (a + b))
 
-    tmids_arr = np.asarray(tmids, dtype=np.float64)
-    values = np.column_stack([
-        np.asarray([frame_values[0] for frame_values in best_params]),
-        np.asarray([frame_values[1] for frame_values in best_params]),
-        np.unwrap(np.asarray([frame_values[2] for frame_values in best_params])),
-    ])
-    tnorm, frame_model = fit_cheb1_frame_model(proto, tmids_arr, values)
-    params = proto.eval_model(frame_model, tnorm)
+    tmids_arr, values = frame_values_from_params(tmids, best_params)
+    tnorm, frame_coeffs = fit_cheb1_frame_model(proto, tmids_arr, values)
+    params = eval_frame_coeffs(proto, frame_coeffs, tnorm)
 
     aligned_coeffs = np.zeros((len(bounds), AXIS_COUNT, cfg.shape_degree + 1), dtype=np.float64)
     for si, (a, b) in enumerate(bounds):
         nodes = cheb_nodes_expanded(a, b, fit_nodes, cfg.segment_domain_expansion_fraction)
         tau = normalize_time_expanded(nodes, a, b, cfg.segment_domain_expansion_fraction)
-        plane_u, plane_v, apsis_angle = params[si]
-        aligned = proto.align_positions(provider.position(nodes), float(plane_u), float(plane_v), float(apsis_angle))
+        aligned = align_positions_frame(proto, provider.position(nodes), params[si])
         for axis in range(AXIS_COUNT):
             aligned_coeffs[si, axis] = proto.cheb_fit(tau, aligned[:, axis], cfg.shape_degree)
     shape_x = np.mean(aligned_coeffs[:, 0, :], axis=0)
@@ -574,9 +613,8 @@ def fit_fixed_frame_body(provider: BaryProvider, cfg: BodyConfig, jd_start: floa
     for si, (a, b) in enumerate(bounds):
         nodes = cheb_nodes_expanded(a, b, fit_nodes, cfg.segment_domain_expansion_fraction)
         tau = normalize_time_expanded(nodes, a, b, cfg.segment_domain_expansion_fraction)
-        plane_u, plane_v, apsis_angle = params[si]
         pos = provider.position(nodes)
-        aligned_truth = proto.align_positions(pos, float(plane_u), float(plane_v), float(apsis_angle))
+        aligned_truth = align_positions_frame(proto, pos, params[si])
         c = np.vstack([
             proto.cheb_fit(tau, aligned_truth[:, 0] - proto.cheb_eval(shape_x, tau), cfg.residual_degree),
             proto.cheb_fit(tau, aligned_truth[:, 1] - proto.cheb_eval(shape_y, tau), cfg.residual_degree),
@@ -592,14 +630,13 @@ def fit_fixed_frame_body(provider: BaryProvider, cfg: BodyConfig, jd_start: floa
             proto.cheb_eval(shape_y, etau) + proto.cheb_eval(reconstructed_coeffs[1], etau),
             proto.cheb_eval(reconstructed_coeffs[2], etau),
         ])
-        recon = proto.unalign_positions(aligned, float(plane_u), float(plane_v), float(apsis_angle))
+        recon = unalign_positions_frame(proto, aligned, params[si])
         eval_jds_parts.append(ej)
         truth_parts.append(provider.position(ej))
         recon_parts.append(recon)
 
     qarr = np.stack(qcoeffs, axis=0)
     widths, payload = pack_qcoeffs(qarr)
-    frame_coeffs = np.vstack([frame_model.coeff_plane_u, frame_model.coeff_plane_v, frame_model.coeff_apsis_angle])
     model_table = pack_model_table(shape_x, shape_y, frame_coeffs)
     p50, p95, p99, max_err = summarize_errors(np.vstack(truth_parts), np.vstack(recon_parts))
     boundaries = np.asarray([bounds[0][0]] + [b for _, b in bounds], dtype=np.float64)
@@ -654,13 +691,12 @@ def fit_helio_mean_apsis_body(
         raise RuntimeError(f"{cfg.body} mean-apsis segments do not cover requested range")
 
     tmids_arr, values = frame_values_from_segments(segments)
-    tnorm, model = fit_cheb1_frame_model(proto, tmids_arr, values)
-    params = proto.eval_model(model, tnorm)
+    tnorm, frame_coeffs = fit_cheb1_frame_model(proto, tmids_arr, values)
+    params = eval_frame_coeffs(proto, frame_coeffs, tnorm)
     coeffs = np.zeros((len(segments), AXIS_COUNT, cfg.shape_degree + 1), dtype=np.float64)
     for si, seg in enumerate(segments):
-        plane_u, plane_v, apsis_angle = params[si]
         tau = normalize_time_expanded(seg.nodes, seg.jd0, seg.jd1, cfg.segment_domain_expansion_fraction)
-        aligned = proto.align_positions(seg.pos, float(plane_u), float(plane_v), float(apsis_angle))
+        aligned = align_positions_frame(proto, seg.pos, params[si])
         for axis in range(AXIS_COUNT):
             coeffs[si, axis] = proto.cheb_fit(tau, aligned[:, axis], cfg.shape_degree)
 
@@ -673,9 +709,8 @@ def fit_helio_mean_apsis_body(
     recon_parts = []
     eval_nodes = max(32, (cfg.residual_degree + 1) * node_oversample)
     for si, seg in enumerate(segments):
-        plane_u, plane_v, apsis_angle = params[si]
         tau = normalize_time_expanded(seg.nodes, seg.jd0, seg.jd1, cfg.segment_domain_expansion_fraction)
-        aligned_truth = proto.align_positions(seg.pos, float(plane_u), float(plane_v), float(apsis_angle))
+        aligned_truth = align_positions_frame(proto, seg.pos, params[si])
         c = np.vstack([
             proto.cheb_fit(tau, aligned_truth[:, 0] - proto.cheb_eval(shape_x, tau), cfg.residual_degree),
             proto.cheb_fit(tau, aligned_truth[:, 1] - proto.cheb_eval(shape_y, tau), cfg.residual_degree),
@@ -693,7 +728,7 @@ def fit_helio_mean_apsis_body(
             proto.cheb_eval(shape_y, etau) + proto.cheb_eval(reconstructed_coeffs[1], etau),
             proto.cheb_eval(reconstructed_coeffs[2], etau),
         ])
-        recon_parts.append(proto.unalign_positions(aligned, float(plane_u), float(plane_v), float(apsis_angle)))
+        recon_parts.append(unalign_positions_frame(proto, aligned, params[si]))
         eval_jds_parts.append(ej)
 
     eval_jds = np.concatenate(eval_jds_parts)
@@ -705,7 +740,6 @@ def fit_helio_mean_apsis_body(
 
     qarr = np.stack(qcoeffs, axis=0)
     widths, payload = pack_qcoeffs(qarr)
-    frame_coeffs = np.vstack([model.coeff_plane_u, model.coeff_plane_v, model.coeff_apsis_angle])
     model_table = pack_model_table(shape_x, shape_y, frame_coeffs)
     p50, p95, p99, max_err = summarize_errors(truth, np.vstack(recon_parts))
     boundaries = np.asarray([segments[0].jd0] + [s.jd1 for s in segments], dtype=np.float64)
@@ -837,14 +871,13 @@ def fit_geo_mean_perigee_moon(cfg: BodyConfig, jd_start: float, jd_end: float, n
 
     segments = select_full_segments(segments_all, jd_start, jd_end, cfg.body)
     tmids_arr, values = frame_values_from_segments(segments)
-    tnorm, model = fit_cheb1_frame_model(moon_proto, tmids_arr, values)
-    params = moon_proto.eval_model(model, tnorm)
+    tnorm, frame_coeffs = fit_cheb1_frame_model(moon_proto, tmids_arr, values)
+    params = eval_frame_coeffs(moon_proto, frame_coeffs, tnorm)
 
     coeffs = np.zeros((len(segments), AXIS_COUNT, cfg.shape_degree + 1), dtype=np.float64)
     for si, seg in enumerate(segments):
-        plane_u, plane_v, apsis_angle = params[si]
         tau = normalize_time_expanded(seg.nodes, seg.jd0, seg.jd1, cfg.segment_domain_expansion_fraction)
-        aligned = moon_proto.align_positions(seg.pos, float(plane_u), float(plane_v), float(apsis_angle))
+        aligned = align_positions_frame(moon_proto, seg.pos, params[si])
         for axis in range(AXIS_COUNT):
             coeffs[si, axis] = moon_proto.cheb_fit(tau, aligned[:, axis], cfg.shape_degree)
     shape_x = np.mean(coeffs[:, 0, :], axis=0)
@@ -857,9 +890,8 @@ def fit_geo_mean_perigee_moon(cfg: BodyConfig, jd_start: float, jd_end: float, n
     recon_parts = []
     eval_nodes = max(32, (cfg.residual_degree + 1) * node_oversample)
     for si, seg in enumerate(segments):
-        plane_u, plane_v, apsis_angle = params[si]
         tau = normalize_time_expanded(seg.nodes, seg.jd0, seg.jd1, cfg.segment_domain_expansion_fraction)
-        aligned_truth = moon_proto.align_positions(seg.pos, float(plane_u), float(plane_v), float(apsis_angle))
+        aligned_truth = align_positions_frame(moon_proto, seg.pos, params[si])
         c = np.vstack([
             moon_proto.cheb_fit(tau, aligned_truth[:, 0] - moon_proto.cheb_eval(shape_x, tau), cfg.residual_degree),
             moon_proto.cheb_fit(tau, aligned_truth[:, 1] - moon_proto.cheb_eval(shape_y, tau), cfg.residual_degree),
@@ -877,7 +909,7 @@ def fit_geo_mean_perigee_moon(cfg: BodyConfig, jd_start: float, jd_end: float, n
             moon_proto.cheb_eval(shape_y, etau) + moon_proto.cheb_eval(reconstructed_coeffs[1], etau),
             moon_proto.cheb_eval(reconstructed_coeffs[2], etau),
         ])
-        recon_parts.append(moon_proto.unalign_positions(aligned, float(plane_u), float(plane_v), float(apsis_angle)))
+        recon_parts.append(unalign_positions_frame(moon_proto, aligned, params[si]))
         eval_jds_parts.append(ej)
         
     provider = moon_proto.GeoMoonProvider()
@@ -889,7 +921,6 @@ def fit_geo_mean_perigee_moon(cfg: BodyConfig, jd_start: float, jd_end: float, n
 
     qarr = np.stack(qcoeffs, axis=0)
     widths, payload = pack_qcoeffs(qarr)
-    frame_coeffs = np.vstack([model.coeff_plane_u, model.coeff_plane_v, model.coeff_apsis_angle])
     model_table = pack_model_table(shape_x, shape_y, frame_coeffs)
     p50, p95, p99, max_err = summarize_errors(truth, np.vstack(recon_parts))
     boundaries = np.asarray([segments[0].jd0] + [s.jd1 for s in segments], dtype=np.float64)
@@ -911,7 +942,7 @@ def center_id(cfg: BodyConfig) -> int:
 
 
 def frame_kind(cfg: BodyConfig) -> int:
-    return FRAME_NONE if cfg.method == "raw_xyz_cheb" else FRAME_CHEB1_PLANE_APSIS
+    return FRAME_NONE if cfg.method == "raw_xyz_cheb" else FRAME_CHEB1_NORMAL_APSIS
 
 
 def reference_shape_kind(cfg: BodyConfig) -> int:
@@ -946,7 +977,7 @@ def model_policy_payload(cfg: BodyConfig) -> bytes:
         event_source = EVENT_SOURCE_SUN_TO_BODY
         boundary_policy = BOUNDARY_GLOBAL_MEAN_EVENT_FIT
         detection = DETECTION_RADIUS_MIN_GRID_ARGRELEXTREMA
-        frame_policy = FRAME_POLICY_CHEB1_BEST_PLANE_APSIS
+        frame_policy = FRAME_POLICY_CHEB1_BEST_NORMAL_APSIS
         apsis_policy = APSIS_POLICY_MIN_RADIUS_DIRECTION
         shape_policy = SHAPE_POLICY_MEAN_XY
         residual_policy = RESIDUAL_POLICY_DIRECT_FIT_FROZEN_SHAPE
@@ -955,7 +986,7 @@ def model_policy_payload(cfg: BodyConfig) -> bytes:
         event_source = EVENT_SOURCE_EARTH_TO_MOON
         boundary_policy = BOUNDARY_GLOBAL_MEAN_PLUS_CENTURY_I16_TABLE
         detection = DETECTION_RADIUS_MIN_GRID_ARGRELEXTREMA
-        frame_policy = FRAME_POLICY_CHEB1_BEST_PLANE_APSIS
+        frame_policy = FRAME_POLICY_CHEB1_BEST_NORMAL_APSIS
         apsis_policy = APSIS_POLICY_MIN_RADIUS_DIRECTION
         shape_policy = SHAPE_POLICY_MEAN_XY
         residual_policy = RESIDUAL_POLICY_DIRECT_FIT_FROZEN_SHAPE
@@ -975,7 +1006,7 @@ def model_policy_payload(cfg: BodyConfig) -> bytes:
             event_source = EVENT_SOURCE_NONE
             boundary_policy = BOUNDARY_NONE_OR_FIXED_TIME
             detection = DETECTION_NONE
-        frame_policy = FRAME_POLICY_CHEB1_BEST_PLANE_APSIS
+        frame_policy = FRAME_POLICY_CHEB1_BEST_NORMAL_APSIS
         apsis_policy = APSIS_POLICY_MIN_RADIUS_DIRECTION
         shape_policy = SHAPE_POLICY_MEAN_XY
         residual_policy = RESIDUAL_POLICY_DIRECT_FIT_FROZEN_SHAPE

@@ -1,0 +1,221 @@
+\documentclass[11pt,a4paper]{ctexart}
+
+% Polished Chinese preprint layout: compact, readable, and less manuscript-like.
+\usepackage[
+  a4paper,
+  left=0.86in,
+  right=0.86in,
+  top=0.78in,
+  bottom=0.86in,
+  headheight=14pt,
+  footskip=0.42in
+]{geometry}
+\usepackage{fontspec}
+\usepackage{xeCJK}
+\setmainfont{Times New Roman}
+\setsansfont{Times New Roman}
+\setmonofont{Times New Roman}[Scale=0.98]
+\setCJKmainfont{Songti SC}[BoldFont=Songti SC Bold]
+\setCJKsansfont{Songti SC}[BoldFont=Songti SC Bold]
+\setCJKmonofont{Songti SC}
+
+\usepackage{amsmath,amssymb,mathtools}
+\usepackage{graphicx}
+\makeatletter
+\newsavebox\pandoc@box
+\newcommand*\pandocbounded[1]{%
+  \sbox\pandoc@box{#1}%
+  \Gscale@div\@tempa{0.78\textheight}{\dimexpr\ht\pandoc@box+\dp\pandoc@box\relax}%
+  \Gscale@div\@tempb{\linewidth}{\wd\pandoc@box}%
+  \ifdim\@tempb\p@<\@tempa\p@\let\@tempa\@tempb\fi%
+  \ifdim\@tempa\p@<\p@\scalebox{\@tempa}{\usebox\pandoc@box}%
+  \else\usebox{\pandoc@box}%
+  \fi%
+}
+\makeatother
+\usepackage{xcolor}
+% Neutral manuscript colors.
+\definecolor{opmblue}{HTML}{000000}
+\definecolor{opmcyan}{HTML}{000000}
+\definecolor{opmgray}{HTML}{F7F7F7}
+\definecolor{opmline}{HTML}{D0D0D0}
+\definecolor{opmdark}{HTML}{000000}
+\usepackage{booktabs,longtable,array,makecell,tabularx}
+\usepackage{etoolbox}
+\usepackage{calc}
+\newcounter{none}
+\usepackage{fancyvrb}
+\usepackage{fvextra}
+\DefineVerbatimEnvironment{Highlighting}{Verbatim}{breaklines,breakanywhere,fontsize=\footnotesize,commandchars=\\\{\},xleftmargin=0.8em}
+\DefineVerbatimEnvironment{verbatim}{Verbatim}{breaklines,breakanywhere,fontsize=\footnotesize,xleftmargin=0.8em}
+\newenvironment{Shaded}{%
+  \begin{center}%
+  \begin{minipage}{0.86\linewidth}%
+  \begin{tcolorbox}[
+    enhanced,
+    colback=opmgray,
+    colframe=opmline,
+    boxrule=0.35pt,
+    arc=1.5pt,
+    left=7pt,
+    right=7pt,
+    top=5pt,
+    bottom=5pt,
+    before skip=0.35em,
+    after skip=0.35em,
+  ]%
+}{%
+  \end{tcolorbox}%
+  \end{minipage}%
+  \end{center}%
+}
+\newcommand{\NormalTok}[1]{#1}
+\newcommand{\AlertTok}[1]{#1}
+\newcommand{\AnnotationTok}[1]{#1}
+\newcommand{\AttributeTok}[1]{#1}
+\newcommand{\BaseNTok}[1]{#1}
+\newcommand{\BuiltInTok}[1]{#1}
+\newcommand{\CharTok}[1]{#1}
+\newcommand{\CommentTok}[1]{#1}
+\newcommand{\CommentVarTok}[1]{#1}
+\newcommand{\ConstantTok}[1]{#1}
+\newcommand{\ControlFlowTok}[1]{#1}
+\newcommand{\DataTypeTok}[1]{#1}
+\newcommand{\DecValTok}[1]{#1}
+\newcommand{\DocumentationTok}[1]{#1}
+\newcommand{\ErrorTok}[1]{#1}
+\newcommand{\ExtensionTok}[1]{#1}
+\newcommand{\FloatTok}[1]{#1}
+\newcommand{\FunctionTok}[1]{#1}
+\newcommand{\ImportTok}[1]{#1}
+\newcommand{\InformationTok}[1]{#1}
+\newcommand{\KeywordTok}[1]{#1}
+\newcommand{\OperatorTok}[1]{#1}
+\newcommand{\OtherTok}[1]{#1}
+\newcommand{\PreprocessorTok}[1]{#1}
+\newcommand{\RegionMarkerTok}[1]{#1}
+\newcommand{\SpecialCharTok}[1]{#1}
+\newcommand{\SpecialStringTok}[1]{#1}
+\newcommand{\StringTok}[1]{#1}
+\newcommand{\VariableTok}[1]{#1}
+\newcommand{\VerbatimStringTok}[1]{#1}
+\newcommand{\WarningTok}[1]{#1}
+\usepackage{enumitem}
+\usepackage{setspace}
+\usepackage{titlesec}
+\usepackage{indentfirst}
+\usepackage{fancyhdr}
+\usepackage{caption}
+\usepackage{float}
+\usepackage{microtype}
+\usepackage[most]{tcolorbox}
+\usepackage{multicol}
+\usepackage{xurl}
+\usepackage{hyperref}
+
+\hypersetup{
+  colorlinks=false,
+  pdfborder={0 0 0},
+  pdftitle={$title$},
+  pdfauthor={$author$}
+}
+
+\setstretch{1.20}
+\setlength{\parindent}{1.65em}
+\setlength{\parskip}{0pt}
+\setlength{\emergencystretch}{5em}
+\setlength{\abovedisplayskip}{0.45\baselineskip plus 0.15\baselineskip minus 0.10\baselineskip}
+\setlength{\belowdisplayskip}{0.45\baselineskip plus 0.15\baselineskip minus 0.10\baselineskip}
+\setlength{\abovedisplayshortskip}{0.25\baselineskip plus 0.10\baselineskip minus 0.08\baselineskip}
+\setlength{\belowdisplayshortskip}{0.35\baselineskip plus 0.10\baselineskip minus 0.08\baselineskip}
+\raggedbottom
+\urlstyle{same}
+\renewcommand{\texttt}[1]{{\normalfont #1}}
+
+\AtBeginEnvironment{longtable}{\footnotesize\setlength{\tabcolsep}{2.2pt}\renewcommand{\arraystretch}{1.08}}
+\AtBeginEnvironment{tabular}{\small\setlength{\tabcolsep}{3.5pt}\renewcommand{\arraystretch}{1.10}}
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyfoot[C]{\footnotesize\thepage}
+\renewcommand{\headrulewidth}{0pt}
+\renewcommand{\footrulewidth}{0pt}
+
+\titleformat{\section}{\bfseries\fontsize{13.2}{15.5}\selectfont}{}{0pt}{}
+\titleformat{\subsection}{\bfseries\fontsize{11.6}{13.5}\selectfont}{}{0pt}{}
+\titleformat{\subsubsection}{\bfseries\fontsize{11}{13}\selectfont}{}{0pt}{}
+\titlespacing*{\section}{0pt}{1.35ex plus .25ex minus .15ex}{0.55ex}
+\titlespacing*{\subsection}{0pt}{1.05ex plus .20ex minus .12ex}{0.38ex}
+\titlespacing*{\subsubsection}{0pt}{0.90ex plus .18ex minus .10ex}{0.32ex}
+
+\captionsetup{font=small,labelfont=bf,labelsep=quad}
+\setlist{nosep,leftmargin=2em}
+\setlist[enumerate]{leftmargin=2.4em,labelsep=0.5em}
+
+\newtcolorbox{abstractbox}{
+  enhanced,
+  colback=white,
+  colframe=white,
+  boxrule=0pt,
+  frame hidden,
+  left=0pt,
+  right=0pt,
+  top=0pt,
+  bottom=0pt,
+  width=0.92\textwidth,
+  center,
+  before skip=0.45em,
+  after skip=0.80em,
+  fontupper=\small\setstretch{1.12}\setlength{\parindent}{1.65em}
+}
+
+\newtcolorbox{keybox}{
+  enhanced,
+  colback=white,
+  colframe=opmcyan,
+  boxrule=0.45pt,
+  leftrule=2.2pt,
+  arc=1.5pt,
+  left=8pt,
+  right=8pt,
+  top=5pt,
+  bottom=5pt,
+  before skip=0.7em,
+  after skip=1.0em,
+  fontupper=\small\setstretch{1.16}
+}
+
+\renewcommand{\arraystretch}{1.12}
+\setlength{\tabcolsep}{3.2pt}
+
+\newenvironment{paperabstract}{%
+  \begin{center}\begin{minipage}{0.92\textwidth}\small
+}{%
+  \end{minipage}\end{center}\vspace{0.5em}
+}
+
+\newenvironment{paperkeywords}{%
+  \begin{center}\begin{minipage}{0.92\textwidth}\small
+}{%
+  \end{minipage}\end{center}\vspace{0.8em}
+}
+
+\providecommand{\tightlist}{%
+  \setlength{\itemsep}{0pt}\setlength{\parskip}{0pt}}
+
+\begin{document}
+
+\thispagestyle{empty}
+\begin{center}
+  \vspace*{-0.65\baselineskip}
+  {\bfseries\fontsize{16.2}{20.5}\selectfont $title$\par}
+  \vspace{0.42\baselineskip}
+  {\fontsize{10.5}{13}\selectfont\itshape $english-title$\par}
+  \vspace{0.50\baselineskip}
+  {$author$\par}
+\end{center}
+\vspace{0.10\baselineskip}
+
+$body$
+
+\end{document}

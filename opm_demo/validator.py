@@ -28,6 +28,7 @@ from opm_demo.generator import BaryProvider
 from opm_demo.format import HEADER_STRUCT, MAGIC, ENDIAN_TAG, FIXED_HEADER_SIZE  # noqa: E402
 from opm_demo.format import HEADER_CRC64_OFFSET, PAYLOAD_CRC64_OFFSET, crc64_ecma  # noqa: E402
 from opm_demo.format import OPM_BODY_IDS, SPK_TARGET_IDS, MOON_CLOCK_TABLE_STRUCT  # noqa: E402
+from opm_demo.format import FRAME_NONE, FRAME_CHEB1_PLANE_APSIS, FRAME_CHEB1_NORMAL_APSIS  # noqa: E402
 
 
 AXIS_COUNT = 3
@@ -119,6 +120,10 @@ class OpmHeader:
     center_id: int
     storage_vector_id: int
     model_kind: int
+    clock_kind: int
+    frame_kind: int
+    reference_shape_kind: int
+    residual_encoding_kind: int
     segment_addressing_kind: int
     axis_count: int
     segment_count: int
@@ -178,6 +183,10 @@ def parse_header(data: bytes) -> OpmHeader:
         center_id=f[15],
         storage_vector_id=f[16],
         model_kind=f[19],
+        clock_kind=f[20],
+        frame_kind=f[21],
+        reference_shape_kind=f[22],
+        residual_encoding_kind=f[23],
         segment_addressing_kind=f[24],
         axis_count=f[25],
         segment_count=f[26],
@@ -273,12 +282,18 @@ def read_opm(path: Path, *, check_crc: bool = True) -> OpmFile:
         if h.reference_shape_degree == 255:
             raise ValueError(f"{path}: model table present but no reference shape degree")
         shape_count = h.reference_shape_degree + 1
-        need = 2 * shape_count + 6
+        if h.frame_kind == FRAME_CHEB1_PLANE_APSIS:
+            frame_rows = 3
+        elif h.frame_kind == FRAME_CHEB1_NORMAL_APSIS:
+            frame_rows = 4
+        else:
+            raise ValueError(f"{path}: unsupported frame_kind={h.frame_kind}")
+        need = 2 * shape_count + frame_rows * 2
         if len(model) != need:
             raise ValueError(f"{path}: model table f64 count mismatch got={len(model)} expected={need}")
         shape_x = model[:shape_count]
         shape_y = model[shape_count : 2 * shape_count]
-        frame_coeffs = model[2 * shape_count :].reshape((3, 2))
+        frame_coeffs = model[2 * shape_count :].reshape((frame_rows, 2))
 
     clock_table = data[h.clock_table_offset : h.clock_table_offset + h.clock_table_size] if h.clock_table_size else b""
     return OpmFile(path, h, quant, widths, qcoeffs, shape_x, shape_y, frame_coeffs, clock_table)
@@ -343,24 +358,34 @@ def frame_params_for_segments(opm: OpmFile, clock: ParsedMercuryClock | ParsedMo
         tnorm = np.zeros(1, dtype=np.float64)
     else:
         tnorm = proto.normalize_time(mids, mids[0], mids[-1])
-    return np.column_stack([proto.cheb_eval(opm.frame_coeffs[i], tnorm) for i in range(3)])
+    params = np.column_stack([proto.cheb_eval(opm.frame_coeffs[i], tnorm) for i in range(opm.frame_coeffs.shape[0])])
+    if h.frame_kind == FRAME_CHEB1_NORMAL_APSIS:
+        normals = params[:, :3]
+        norms = np.linalg.norm(normals, axis=1)
+        if np.any(norms <= 0.0):
+            raise ValueError(f"{opm.path}: invalid evaluated normal frame")
+        params[:, :3] = normals / norms[:, None]
+    return params
 
 
 def reconstruct_positions(opm: OpmFile, jds: np.ndarray) -> np.ndarray:
     h = opm.header
-    out = np.zeros((len(jds), 3), dtype=np.float64)
+    jds = np.asarray(jds, dtype=np.float64)
+    out = np.full((len(jds), 3), np.nan, dtype=np.float64)
+    filled = np.zeros(len(jds), dtype=bool)
     coeffs = opm.qcoeffs.astype(np.float64) * opm.quant_steps[None, None, :]
 
     clock = mercury_clock(opm) or moon_clock(opm)
     params = frame_params_for_segments(opm, clock) if opm.frame_coeffs is not None else None
+    boundary_tol = 1e-9
     for si in range(h.segment_count):
         a, b = segment_bounds(h, si, clock)
         lo = max(a, h.coverage_start_jd)
         hi = min(b, h.coverage_start_jd + h.coverage_span_days)
         if si == h.segment_count - 1:
-            mask = (jds >= lo) & (jds <= hi)
+            mask = (jds >= lo - boundary_tol) & (jds <= hi + boundary_tol) & ~filled
         else:
-            mask = (jds >= lo) & (jds < hi)
+            mask = (jds >= lo - boundary_tol) & (jds < hi + boundary_tol) & ~filled
         if not np.any(mask):
             continue
         tau = normalize_expanded(jds[mask], a, b, h.expansion)
@@ -374,10 +399,13 @@ def reconstruct_positions(opm: OpmFile, jds: np.ndarray) -> np.ndarray:
                 proto.cheb_eval(opm.shape_y, tau) + proto.cheb_eval(coeffs[si, 1], tau),
                 proto.cheb_eval(coeffs[si, 2], tau),
             ])
-            plane_u, plane_v, apsis_angle = params[si]
-            out[mask] = proto.unalign_positions(aligned, float(plane_u), float(plane_v), float(apsis_angle))
+            out[mask] = proto.unalign_positions_normal(aligned, params[si, :3], float(params[si, 3])) if params.shape[1] == 4 else proto.unalign_positions(aligned, float(params[si, 0]), float(params[si, 1]), float(params[si, 2]))
         else:
             raise ValueError(f"{opm.path}: unsupported model_kind={h.model_kind}")
+        filled[mask] = True
+    if not np.all(filled):
+        missing = jds[~filled]
+        raise ValueError(f"{opm.path}: {len(missing)} JD(s) outside OPM coverage; first missing JD={missing[0]:.12f}")
     if np.any(~np.isfinite(out)):
         raise ValueError(f"{opm.path}: non-finite reconstruction")
     return out
@@ -387,6 +415,16 @@ def truth_positions(spk: SPK, opm: OpmFile, jds: np.ndarray) -> np.ndarray:
     provider, closeable = truth_position_provider(spk, opm)
     try:
         return provider.position(jds)
+    finally:
+        close_if_needed(closeable)
+
+
+def truth_velocities(spk: SPK, opm: OpmFile, jds: np.ndarray) -> np.ndarray:
+    provider, closeable = truth_position_provider(spk, opm)
+    try:
+        if not hasattr(provider, "velocity"):
+            raise ValueError(f"{opm.path}: truth provider does not expose velocity")
+        return provider.velocity(jds)
     finally:
         close_if_needed(closeable)
 
@@ -416,7 +454,42 @@ def cheb_eval_segment_coeffs(coeffs: np.ndarray, tau: np.ndarray) -> np.ndarray:
     return np.einsum("snd,sd->sn", vander, coeffs)
 
 
+def cheb_derivative_coeffs(coeffs: np.ndarray) -> np.ndarray:
+    return np.polynomial.chebyshev.chebder(coeffs, axis=-1)
+
+
+def cheb_eval_segment_derivative_coeffs(coeffs: np.ndarray, tau: np.ndarray, scale: np.ndarray) -> np.ndarray:
+    return cheb_eval_segment_coeffs(coeffs, tau) * scale[:, None]
+
+
+def cheb_eval_global_derivative_coeffs(coeffs: np.ndarray, tau: np.ndarray, scale: np.ndarray) -> np.ndarray:
+    return np.polynomial.chebyshev.chebval(tau, coeffs) * scale[:, None]
 def plane_frames_for_params(params: np.ndarray) -> np.ndarray:
+    if params.shape[1] == 4:
+        normals = params[:, :3].astype(np.float64, copy=True)
+        norms = np.linalg.norm(normals, axis=1)
+        if np.any(norms <= 0.0):
+            raise ValueError("invalid normal-frame params")
+        normals /= norms[:, None]
+        nx = normals[:, 0]
+        ny = normals[:, 1]
+        nz = normals[:, 2]
+        frames = np.empty((len(params), 3, 3), dtype=np.float64)
+        mask = nz > -1.0 + 1e-12
+        inv = np.empty_like(nz)
+        inv[mask] = 1.0 / (1.0 + nz[mask])
+        frames[mask, 0, 0] = 1.0 - nx[mask] * nx[mask] * inv[mask]
+        frames[mask, 1, 0] = -nx[mask] * ny[mask] * inv[mask]
+        frames[mask, 2, 0] = -nx[mask]
+        frames[mask, 0, 1] = -nx[mask] * ny[mask] * inv[mask]
+        frames[mask, 1, 1] = 1.0 - ny[mask] * ny[mask] * inv[mask]
+        frames[mask, 2, 1] = -ny[mask]
+        frames[mask, :, 2] = normals[mask]
+        if np.any(~mask):
+            frames[~mask, :, 0] = np.asarray([1.0, 0.0, 0.0])
+            frames[~mask, :, 1] = np.asarray([0.0, -1.0, 0.0])
+            frames[~mask, :, 2] = normals[~mask]
+        return frames
     plane_u = params[:, 0]
     plane_v = params[:, 1]
     den_inv = 1.0 / (1.0 + plane_u * plane_u + plane_v * plane_v)
@@ -434,7 +507,7 @@ def plane_frames_for_params(params: np.ndarray) -> np.ndarray:
 
 
 def unalign_positions_batched(aligned: np.ndarray, params: np.ndarray) -> np.ndarray:
-    apsis_angle = params[:, 2]
+    apsis_angle = params[:, -1]
     c = np.cos(apsis_angle)
     s = np.sin(apsis_angle)
     local = np.empty_like(aligned)
@@ -451,6 +524,8 @@ def segment_chunk_nodes(
     stop_segment: int,
     nodes_per_segment: int,
     clock: ParsedMercuryClock | ParsedMoonClock | None,
+    *,
+    include_endpoints: bool = False,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     h = opm.header
     coverage_end = h.coverage_start_jd + h.coverage_span_days
@@ -465,11 +540,15 @@ def segment_chunk_nodes(
             continue
         segment_indices.append(si)
         bounds.append((a, b))
-        nodes_parts.append(proto.cheb_nodes(lo, hi, nodes_per_segment))
+        nodes = proto.cheb_nodes(lo, hi, nodes_per_segment)
+        if include_endpoints:
+            nodes = np.unique(np.concatenate([nodes, np.asarray([lo, hi], dtype=np.float64)]))
+        nodes_parts.append(nodes)
     if not segment_indices:
+        node_count = nodes_per_segment + (2 if include_endpoints else 0)
         return (
             np.empty((0,), dtype=np.int64),
-            np.empty((0, nodes_per_segment), dtype=np.float64),
+            np.empty((0, node_count), dtype=np.float64),
             np.empty((0,), dtype=np.float64),
             np.empty((0,), dtype=np.float64),
         )
@@ -507,6 +586,34 @@ def reconstruct_segment_nodes(
     raise ValueError(f"{opm.path}: unsupported model_kind={h.model_kind}")
 
 
+def reconstruct_segment_node_velocities(
+    opm: OpmFile,
+    segment_indices: np.ndarray,
+    tau: np.ndarray,
+    dcoeffs: np.ndarray,
+    params: np.ndarray | None,
+    scale: np.ndarray,
+) -> np.ndarray:
+    h = opm.header
+    segment_dcoeffs = dcoeffs[segment_indices]
+    if h.model_kind == MODEL_RAW_XYZ_CHEB:
+        return np.stack(
+            [cheb_eval_segment_derivative_coeffs(segment_dcoeffs[:, axis, :], tau, scale) for axis in range(AXIS_COUNT)],
+            axis=2,
+        )
+    if h.model_kind in {MODEL_FIXED_FRAME_SHAPE, MODEL_MEAN_APSIS_FRAME_SHAPE, MODEL_MEAN_LUNAR_APSIS_FRAME_SHAPE}:
+        if opm.shape_x is None or opm.shape_y is None or params is None:
+            raise ValueError(f"{opm.path}: orbital-frame model missing model table")
+        dshape_x = cheb_derivative_coeffs(opm.shape_x)
+        dshape_y = cheb_derivative_coeffs(opm.shape_y)
+        aligned = np.empty((len(segment_indices), tau.shape[1], AXIS_COUNT), dtype=np.float64)
+        aligned[:, :, 0] = cheb_eval_global_derivative_coeffs(dshape_x, tau, scale) + cheb_eval_segment_derivative_coeffs(segment_dcoeffs[:, 0, :], tau, scale)
+        aligned[:, :, 1] = cheb_eval_global_derivative_coeffs(dshape_y, tau, scale) + cheb_eval_segment_derivative_coeffs(segment_dcoeffs[:, 1, :], tau, scale)
+        aligned[:, :, 2] = cheb_eval_segment_derivative_coeffs(segment_dcoeffs[:, 2, :], tau, scale)
+        return unalign_positions_batched(aligned, params[segment_indices])
+    raise ValueError(f"{opm.path}: unsupported model_kind={h.model_kind}")
+
+
 def validate_segment_chunk(
     provider: object,
     opm: OpmFile,
@@ -527,6 +634,40 @@ def validate_segment_chunk(
     recon = reconstruct_segment_nodes(opm, segment_indices, tau, coeffs, params).reshape((-1, AXIS_COUNT))
     truth = provider.position(jds.reshape(-1))
     return proto.angular_errors_arcsec(truth, recon)
+
+
+def native_residual_segment_chunk(
+    provider: object,
+    opm: OpmFile,
+    coeffs: np.ndarray,
+    dcoeffs: np.ndarray,
+    params: np.ndarray | None,
+    clock: ParsedMercuryClock | ParsedMoonClock | None,
+    start_segment: int,
+    stop_segment: int,
+    nodes_per_segment: int,
+    *,
+    include_endpoints: bool = False,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    if not hasattr(provider, "velocity"):
+        raise ValueError(f"{opm.path}: truth provider does not expose velocity")
+    segment_indices, jds, a, b = segment_chunk_nodes(opm, start_segment, stop_segment, nodes_per_segment, clock, include_endpoints=include_endpoints)
+    if len(segment_indices) == 0:
+        empty = np.empty((0,), dtype=np.float64)
+        return empty, empty, empty
+    width = b - a
+    expanded_a = a - opm.header.expansion * width
+    expanded_b = b + opm.header.expansion * width
+    scale = 2.0 / (expanded_b - expanded_a)
+    tau = (2.0 * jds - expanded_a[:, None] - expanded_b[:, None]) / (expanded_b - expanded_a)[:, None]
+    flat_jds = jds.reshape(-1)
+    recon_pos = reconstruct_segment_nodes(opm, segment_indices, tau, coeffs, params).reshape((-1, AXIS_COUNT))
+    recon_vel = reconstruct_segment_node_velocities(opm, segment_indices, tau, dcoeffs, params, scale).reshape((-1, AXIS_COUNT))
+    truth_pos = provider.position(flat_jds)
+    truth_vel = provider.velocity(flat_jds)
+    pos_err_km = np.linalg.norm(recon_pos - truth_pos, axis=1)
+    vel_err_km_day = np.linalg.norm(recon_vel - truth_vel, axis=1)
+    return flat_jds, pos_err_km, vel_err_km_day
 
 
 def validate_one(

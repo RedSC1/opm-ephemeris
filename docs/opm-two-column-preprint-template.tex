@@ -1,0 +1,168 @@
+\documentclass[10pt,a4paper,twocolumn]{article}
+
+% Neutral two-column technical preprint layout. This is intentionally
+% self-contained and does not imitate a specific journal class.
+\usepackage[
+  a4paper,
+  left=0.63in,
+  right=0.63in,
+  top=0.64in,
+  bottom=0.72in,
+  headheight=13pt,
+  footskip=0.32in,
+  columnsep=0.24in
+]{geometry}
+\usepackage{fontspec}
+\setmainfont{Times New Roman}
+\setsansfont{Times New Roman}
+\setmonofont{Menlo}[Scale=0.78]
+
+\usepackage{amsmath,amssymb,mathtools}
+\usepackage{graphicx}
+\makeatletter
+\newsavebox\pandoc@box
+\newcommand*\pandocbounded[1]{%
+  \sbox\pandoc@box{#1}%
+  \Gscale@div\@tempa{0.60\textheight}{\dimexpr\ht\pandoc@box+\dp\pandoc@box\relax}%
+  \Gscale@div\@tempb{\linewidth}{\wd\pandoc@box}%
+  \ifdim\@tempb\p@<\@tempa\p@\let\@tempa\@tempb\fi%
+  \ifdim\@tempa\p@<\p@\scalebox{\@tempa}{\usebox\pandoc@box}%
+  \else\usebox{\pandoc@box}%
+  \fi%
+}
+\makeatother
+\usepackage{xcolor}
+\definecolor{opmgray}{HTML}{F7F7F7}
+\definecolor{opmline}{HTML}{D0D0D0}
+\usepackage{booktabs,longtable,array,makecell,tabularx}
+\usepackage{etoolbox}
+\usepackage{calc}
+\newcounter{none}
+\usepackage{fancyvrb}
+\usepackage{fvextra}
+\DefineVerbatimEnvironment{Highlighting}{Verbatim}{breaklines,breakanywhere,fontsize=\tiny,commandchars=\\\{\},xleftmargin=0.4em}
+\DefineVerbatimEnvironment{verbatim}{Verbatim}{breaklines,breakanywhere,fontsize=\tiny,xleftmargin=0.4em}
+\usepackage[most]{tcolorbox}
+\newenvironment{Shaded}{%
+  \begin{center}%
+  \begin{minipage}{0.98\linewidth}%
+  \begin{tcolorbox}[
+    enhanced,
+    colback=opmgray,
+    colframe=opmline,
+    boxrule=0.25pt,
+    arc=1.0pt,
+    left=4pt,
+    right=4pt,
+    top=3pt,
+    bottom=3pt,
+    before skip=0.25em,
+    after skip=0.25em,
+  ]%
+}{%
+  \end{tcolorbox}%
+  \end{minipage}%
+  \end{center}%
+}
+\newcommand{\NormalTok}[1]{#1}
+\newcommand{\AlertTok}[1]{#1}
+\newcommand{\AnnotationTok}[1]{#1}
+\newcommand{\AttributeTok}[1]{#1}
+\newcommand{\BaseNTok}[1]{#1}
+\newcommand{\BuiltInTok}[1]{#1}
+\newcommand{\CharTok}[1]{#1}
+\newcommand{\CommentTok}[1]{#1}
+\newcommand{\CommentVarTok}[1]{#1}
+\newcommand{\ConstantTok}[1]{#1}
+\newcommand{\ControlFlowTok}[1]{#1}
+\newcommand{\DataTypeTok}[1]{#1}
+\newcommand{\DecValTok}[1]{#1}
+\newcommand{\DocumentationTok}[1]{#1}
+\newcommand{\ErrorTok}[1]{#1}
+\newcommand{\ExtensionTok}[1]{#1}
+\newcommand{\FloatTok}[1]{#1}
+\newcommand{\FunctionTok}[1]{#1}
+\newcommand{\ImportTok}[1]{#1}
+\newcommand{\InformationTok}[1]{#1}
+\newcommand{\KeywordTok}[1]{#1}
+\newcommand{\OperatorTok}[1]{#1}
+\newcommand{\OtherTok}[1]{#1}
+\newcommand{\PreprocessorTok}[1]{#1}
+\newcommand{\RegionMarkerTok}[1]{#1}
+\newcommand{\SpecialCharTok}[1]{#1}
+\newcommand{\SpecialStringTok}[1]{#1}
+\newcommand{\StringTok}[1]{#1}
+\newcommand{\VariableTok}[1]{#1}
+\newcommand{\VerbatimStringTok}[1]{#1}
+\newcommand{\WarningTok}[1]{#1}
+\usepackage{enumitem}
+\usepackage{setspace}
+\usepackage{titlesec}
+\usepackage{fancyhdr}
+\usepackage[font=small,labelfont=bf,labelsep=quad]{caption}
+\usepackage{float}
+\usepackage{placeins}
+\usepackage{cuted}
+\usepackage{microtype}
+\usepackage{xurl}
+\usepackage{hyperref}
+
+\hypersetup{
+  colorlinks=false,
+  pdfborder={0 0 0},
+  pdftitle={$title$},
+  pdfauthor={$author$}
+}
+
+\setstretch{1.00}
+\setlength{\parindent}{1.15em}
+\setlength{\parskip}{0pt}
+\sloppy
+\setlength{\emergencystretch}{3em}
+\setlength{\abovedisplayskip}{0.36\baselineskip plus 0.10\baselineskip minus 0.08\baselineskip}
+\setlength{\belowdisplayskip}{0.36\baselineskip plus 0.10\baselineskip minus 0.08\baselineskip}
+\raggedbottom
+\urlstyle{same}
+\renewcommand{\texttt}[1]{{\normalfont #1}}
+
+\AtBeginEnvironment{longtable}{\scriptsize\setlength{\tabcolsep}{1.5pt}\setlength{\extrarowheight}{1.1pt}\renewcommand{\arraystretch}{1.10}}
+\AtBeginEnvironment{tabular}{\scriptsize\setlength{\tabcolsep}{1.8pt}\setlength{\extrarowheight}{1.1pt}\renewcommand{\arraystretch}{1.10}}
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\footnotesize OPM technical preprint}
+\fancyhead[R]{\footnotesize \thepage}
+\renewcommand{\headrulewidth}{0.25pt}
+\renewcommand{\footrulewidth}{0pt}
+
+\titleformat{\section}{\bfseries\large}{}{0pt}{}
+\titleformat{\subsection}{\bfseries\normalsize}{}{0pt}{}
+\titleformat{\subsubsection}{\bfseries\normalsize\itshape}{}{0pt}{}
+\titlespacing*{\section}{0pt}{1.20ex plus .20ex minus .12ex}{0.42ex}
+\titlespacing*{\subsection}{0pt}{0.90ex plus .18ex minus .10ex}{0.28ex}
+\titlespacing*{\subsubsection}{0pt}{0.70ex plus .15ex minus .08ex}{0.20ex}
+
+\setlist{nosep,leftmargin=1.35em}
+\setlist[enumerate]{leftmargin=1.65em,labelsep=0.35em}
+\providecommand{\tightlist}{\setlength{\itemsep}{0pt}\setlength{\parskip}{0pt}}
+
+\begin{document}
+
+\twocolumn[
+\begin{@twocolumnfalse}
+\thispagestyle{empty}
+\begin{center}
+  \vspace*{-0.8\baselineskip}
+  {\bfseries\fontsize{17}{20}\selectfont $title$\par}
+  \vspace{0.45\baselineskip}
+  {\fontsize{10.5}{12.5}\selectfont $author$\par}
+  \vspace{0.30\baselineskip}
+  {\small Technical preprint\par}
+\end{center}
+\vspace{0.35\baselineskip}
+\end{@twocolumnfalse}
+]
+
+$body$
+
+\end{document}

@@ -34,15 +34,15 @@ python3 generate_range.py \
   --output out/small/j2000-opm/moon.opm
 ```
 
-Recommended release-style generation uses 600-year shards with the current polish pipeline:
+Recommended release-style generation uses the 600-year shard used by the paper:
 
 ```bash
 python3 generate_range.py \
   --de441 /path/to/de441.bsp \
   --all \
-  --jd-start 2451545.0 \
+  --jd-start 2378495.0 \
   --days 219150 \
-  --output-root out/opm600/c+0000 \
+  --output-root out/opm600/j1800 \
   --polish \
   --validate
 ```
@@ -53,10 +53,26 @@ python3 generate_range.py \
 python3 validate_opm.py --de441 /path/to/de441.bsp out/small/j2000-opm
 ```
 
+## Dense Swiss Ephemeris comparison
+
+Reproduce the paper's dense geocentric comparison and SVG plots with explicit local paths for DE441 and Swiss Ephemeris data:
+
+```bash
+python3 tools/dense_compare_opm_swiss_geocentric.py \
+  --de441 /path/to/de441.bsp \
+  --opm-root out/opm600/j1800 \
+  --swiss-ephe /path/to/swiss/ephe \
+  --nodes-per-segment 512 \
+  --plot-dir out/opm600/j1800-plots \
+  > out/opm600/j1800-dense-512.txt
+```
+
+The script uses `swe.calc()` through `pyswisseph`; the Swiss Ephemeris file path is supplied by the caller and is not hardcoded.
+
 ## Read positions
 
 ```bash
-python3 examples/read_position.py out/small/j2000-opm/moon.opm 2451545.0
+python3 examples/read_position.py out/opm600/j1800/moon.opm 2451545.0
 ```
 
 Output columns are:

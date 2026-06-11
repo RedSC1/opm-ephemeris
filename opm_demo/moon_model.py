@@ -101,6 +101,20 @@ class GeoMoonProvider:
             out[mask, 2] = xm[2] - xe[2]
         return out
 
+    def velocity(self, jd_arr: np.ndarray) -> np.ndarray:
+        tdb = np.asarray(jd_arr, dtype=np.float64)
+        out = np.zeros((len(tdb), 3), dtype=np.float64)
+        for moon_seg, earth_seg in zip(self.moon_segments, self.earth_segments):
+            mask = (tdb >= moon_seg.start_jd) & (tdb <= moon_seg.end_jd)
+            if not np.any(mask):
+                continue
+            _xm, vm = moon_seg.compute_and_differentiate(tdb[mask])
+            _xe, ve = earth_seg.compute_and_differentiate(tdb[mask])
+            out[mask, 0] = vm[0] - ve[0]
+            out[mask, 1] = vm[1] - ve[1]
+            out[mask, 2] = vm[2] - ve[2]
+        return out
+
 
 def plane_frame(plane_u: float, plane_v: float) -> np.ndarray:
     den_inv = 1.0 / (1.0 + plane_u * plane_u + plane_v * plane_v)
@@ -119,6 +133,50 @@ def normal_to_plane_uv(normal: np.ndarray) -> tuple[float, float]:
     if denom < 1e-15:
         raise ValueError("normal too close to south pole")
     return float(w[0] / denom), float(-w[1] / denom)
+
+
+def normal_from_plane_uv(plane_u: float, plane_v: float) -> np.ndarray:
+    den = 1.0 + plane_u * plane_u + plane_v * plane_v
+    return np.asarray([2.0 * plane_u / den, -2.0 * plane_v / den, (1.0 - plane_u * plane_u - plane_v * plane_v) / den], dtype=np.float64)
+
+
+def normalize_normal(normal: np.ndarray) -> np.ndarray:
+    n = np.asarray(normal, dtype=np.float64)
+    norm = float(np.linalg.norm(n))
+    if norm <= 0.0 or not math.isfinite(norm):
+        raise ValueError("invalid frame normal")
+    return n / norm
+
+
+def frame_from_normal(normal: np.ndarray) -> np.ndarray:
+    n = normalize_normal(normal)
+    nx, ny, nz = float(n[0]), float(n[1]), float(n[2])
+    if nz > -1.0 + 1e-12:
+        inv = 1.0 / (1.0 + nz)
+        x_axis = np.asarray([1.0 - nx * nx * inv, -nx * ny * inv, -nx], dtype=np.float64)
+        y_axis = np.asarray([-nx * ny * inv, 1.0 - ny * ny * inv, -ny], dtype=np.float64)
+    else:
+        x_axis = np.asarray([1.0, 0.0, 0.0], dtype=np.float64)
+        y_axis = np.asarray([0.0, -1.0, 0.0], dtype=np.float64)
+    return np.column_stack([x_axis, y_axis, n])
+
+
+def align_positions_normal(pos: np.ndarray, normal: np.ndarray, apsis_angle: float) -> np.ndarray:
+    local = pos @ frame_from_normal(normal)
+    c = math.cos(apsis_angle)
+    s = math.sin(apsis_angle)
+    x = c * local[:, 0] + s * local[:, 1]
+    y = -s * local[:, 0] + c * local[:, 1]
+    return np.column_stack([x, y, local[:, 2]])
+
+
+def unalign_positions_normal(aligned: np.ndarray, normal: np.ndarray, apsis_angle: float) -> np.ndarray:
+    c = math.cos(apsis_angle)
+    s = math.sin(apsis_angle)
+    local_x = c * aligned[:, 0] - s * aligned[:, 1]
+    local_y = s * aligned[:, 0] + c * aligned[:, 1]
+    local = np.column_stack([local_x, local_y, aligned[:, 2]])
+    return local @ frame_from_normal(normal).T
 
 
 def fit_best_frame_params(pos: np.ndarray) -> tuple[float, float, float]:
