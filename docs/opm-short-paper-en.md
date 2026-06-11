@@ -469,7 +469,7 @@ Table 6 gives the actual `.opm` file sizes in the 600-year production instance. 
 | Pluto | 2.68 | 0.45 |
 | **Total** | **1676.77 KiB = 1.64 MiB** | **279.46** |
 
-The Moon dominates the current size, accounting for about 70% of the total 600-year data set. Mercury, the Sun, Venus, and EMB follow. The outer planets move more slowly and have fewer segments, so their individual 600-year files range from a few KiB to about 10 KiB. If the total per-century size in Table 6 is linearly extrapolated to the full DE441 time span, JD -3100015--8000016 (about 303.9 Julian centuries), the major-body data set would be about 82.9 MiB, or about 87.0 MB. This extrapolation is only an order-of-magnitude comparison; it is not a completed full-DE441 production validation.
+The Moon dominates the current size, accounting for about 70% of the total 600-year data set. Mercury, the Sun, Venus, and EMB follow. The outer planets move more slowly and have fewer segments, so their individual 600-year files range from a few KiB to about 10 KiB. As a same-interval file-size reference, the corresponding core files in the local DE441-based Swiss Ephemeris installation are `sepl_18.se1` for the Sun through Pluto and `semo_18.se1` for the Moon; together they occupy 1,788,832 bytes, or about 1.71 MiB. The main-asteroid file `seas_18.se1` is not included in this comparison. If the total per-century size in Table 6 is linearly extrapolated to the full DE441 time span, JD -3100015--8000016 (about 303.9 Julian centuries), the major-body data set would be about 82.9 MiB. This extrapolation is only an order-of-magnitude comparison; it is not a completed full-DE441 production validation.
 
 ---
 

@@ -1,6 +1,8 @@
-# OPM Python demo
+# OPM Ephemeris
 
-Reference Python code for generating, reading, validating, and benchmarking prototype OPM1 files. This repository is paper/demo code, not the production C++ implementation.
+Compact Chebyshev ephemeris representation with Python reference tools, validation artifacts, and a technical preprint.
+
+This repository contains paper/demo code for generating, reading, validating, and benchmarking prototype OPM1 files. It is not the production C++ implementation.
 
 ## Install
 
@@ -67,7 +69,7 @@ python3 tools/dense_compare_opm_swiss_geocentric.py \
   > out/opm600/j1800-dense-512.txt
 ```
 
-The script uses `swe.calc()` through `pyswisseph`; the Swiss Ephemeris file path is supplied by the caller and is not hardcoded.
+The script uses `swe.calc()` through `pyswisseph`; the Swiss Ephemeris file path is supplied by the caller and is not hardcoded. For the 1800--2400 interval used by the paper, the corresponding Swiss Ephemeris core files in the local DE441-based installation are `sepl_18.se1` and `semo_18.se1`. In Swiss Ephemeris terminology, `sepl_18.se1` is the planetary file used for Sun through Pluto, while `semo_18.se1` is the Moon file. This does not mean that `sepl_18.se1` stores a separate independent fitted series for every requested output convention; Swiss Ephemeris applies its own internal coordinate conventions and transformations, e.g. deriving barycentric Sun from Earth-related heliocentric/barycentric quantities when needed.
 
 ## Read positions
 
@@ -120,6 +122,14 @@ payload_crc64  computed over all bytes after the fixed header
 ```
 
 Readers validate them by default; pass `--no-crc` to validation or benchmark scripts to skip this check when desired.
+
+## License
+
+Code in this repository is licensed under the Apache License 2.0; see `LICENSE`.
+
+Paper sources, generated PDFs, figures, plots, and generated OPM release artifacts are licensed under Creative Commons Attribution 4.0 International (CC BY 4.0), unless otherwise noted; see `LICENSE-DOCS`.
+
+JPL/NAIF ephemeris data, Swiss Ephemeris, `pyswisseph`, fonts, and other third-party dependencies are governed by their own licenses and terms. They are not redistributed as part of this repository; see `THIRD_PARTY_NOTICES.md`.
 
 ## Included clock constants
 
