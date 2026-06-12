@@ -15,6 +15,25 @@ The PDFs and sources are also included in `docs/`:
 - English: [`docs/opm-short-paper-en.pdf`](docs/opm-short-paper-en.pdf) ([source](docs/opm-short-paper-en.md))
 - Chinese: [`docs/opm-short-paper-zh.pdf`](docs/opm-short-paper-zh.pdf) ([source](docs/opm-short-paper-zh.md))
 
+## Full-range validation overview
+
+A private full-range generation run over the strict-safe DE441 interval, JD `-3092455.0..7991545.0` (about 30,346 Julian years), produced 51 OPM shards. The final polished `.opm` files occupy about 84 MiB. A 512-node-per-segment OPM-vs-DE441 geocentric angular validation over all shards produced the following overview. Values are in arcseconds; `p50`/`p95`/`p99` are the worst shard-level percentiles across the 51 shards, while `max` is the full-run maximum.
+
+| Body | Samples | worst p50 | worst p95 | worst p99 | max |
+|---|---:|---:|---:|---:|---:|
+| Sun | 31,602,390 | 0.0000836 | 0.000303 | 0.000396 | 0.000603 |
+| Moon | 206,384,055 | 0.000199 | 0.000348 | 0.000391 | 0.000580 |
+| Mercury | 64,663,188 | 0.000106 | 0.000337 | 0.000520 | 0.00116 |
+| Venus | 25,344,811 | 0.000131 | 0.000649 | 0.00117 | 0.00276 |
+| Mars | 8,307,737 | 0.000151 | 0.000635 | 0.00101 | 0.00248 |
+| Jupiter | 1,920,210 | 0.000183 | 0.000371 | 0.000445 | 0.000658 |
+| Saturn | 1,650,372 | 0.000185 | 0.000364 | 0.000456 | 0.000809 |
+| Uranus | 736,719 | 0.000202 | 0.000374 | 0.000432 | 0.000579 |
+| Neptune | 594,618 | 0.000215 | 0.000402 | 0.000458 | 0.000575 |
+| Pluto | 594,618 | 0.000180 | 0.000357 | 0.000443 | 0.000612 |
+
+The repository does not redistribute the DE441 BSP file used for generation or validation.
+
 ## Install
 
 ```bash
