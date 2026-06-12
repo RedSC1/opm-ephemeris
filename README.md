@@ -6,7 +6,11 @@ This repository contains paper/demo code for generating, reading, validating, an
 
 ## Technical preprint
 
-The technical preprint is included in `docs/`:
+The technical preprint is archived on Zenodo:
+
+- Zenodo record: <https://zenodo.org/records/20636663>
+
+The PDFs and sources are also included in `docs/`:
 
 - English: [`docs/opm-short-paper-en.pdf`](docs/opm-short-paper-en.pdf) ([source](docs/opm-short-paper-en.md))
 - Chinese: [`docs/opm-short-paper-zh.pdf`](docs/opm-short-paper-zh.pdf) ([source](docs/opm-short-paper-zh.md))
